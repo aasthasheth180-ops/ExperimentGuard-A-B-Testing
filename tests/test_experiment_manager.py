@@ -2,6 +2,7 @@ import pytest
 
 from src.experimentguard.experiment import Experiment
 from src.experimentguard.experiment_manager import ExperimentManager
+from dataclasses import replace
 
 
 def make_experiment(experiment_id="checkout_v1"):
@@ -56,8 +57,7 @@ def test_completed_experiment_cannot_restart():
 
 def test_non_draft_experiment_cannot_be_created():
     manager = ExperimentManager()
-    experiment = make_experiment()
-    experiment.status = "running"
+    experiment = replace(make_experiment(), status="running")
 
     with pytest.raises(ValueError, match="must start in draft"):
         manager.create_experiment(experiment)
