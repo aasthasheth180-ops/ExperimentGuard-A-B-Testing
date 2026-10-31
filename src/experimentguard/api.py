@@ -11,6 +11,7 @@ from .database import SessionLocal
 from .experiment_repository import ExperimentRepository
 from .event_repository import EventRepository
 from .metrics_repository import MetricsRepository
+from .statistics_repository import StatisticsRepository
 from .models import ExperimentRecord
 
 
@@ -244,4 +245,33 @@ def get_experiment_metrics(
         "relative_lift_percent": repository.get_relative_lift(
             experiment_id
         ),
+    }
+
+
+@app.get("/experiments/{experiment_id}/statistics")
+def get_experiment_statistics(
+    experiment_id: str,
+    db: Session = Depends(get_db),
+):
+    experiment = db.get(ExperimentRecord, experiment_id)
+
+    if experiment is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Experiment not found.",
+        )
+
+    repository = StatisticsRepository(db)
+
+    try:
+        result = repository.get_significance(experiment_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
+
+    return {
+        "experiment_id": experiment_id,
+        "statistics": result,
     }
