@@ -1,5 +1,6 @@
 from logging.config import fileConfig
-
+import os
+from sqlalchemy.engine import make_url
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
@@ -8,13 +9,19 @@ from src.experimentguard import models  # Register SQLAlchemy models
 
 config = context.config
 
+database_url = make_url(
+    os.getenv("ALEMBIC_DATABASE_URL")
+    or DATABASE_URL.render_as_string(hide_password=False)
+)
+
+
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Use the database credentials loaded from .env
 config.set_main_option(
     "sqlalchemy.url",
-    DATABASE_URL.render_as_string(hide_password=False).replace("%", "%%"),
+    database_url.render_as_string(hide_password=False).replace("%", "%%"),
 )
 
 # Tell Alembic which tables to track
@@ -23,7 +30,7 @@ target_metadata = Base.metadata
 
 def run_migrations_offline():
     context.configure(
-        url=DATABASE_URL.render_as_string(hide_password=False),
+        url=database_url.render_as_string(hide_password=False),
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},

@@ -1,11 +1,9 @@
 from datetime import datetime, timezone
-
-from sqlalchemy import DateTime, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy import ForeignKey, UniqueConstraint
 from .database import Base
-
+from sqlalchemy import DateTime, String, ForeignKey, UniqueConstraint, Integer
 
 class ExperimentRecord(Base):
     __tablename__ = "experiments"
@@ -13,6 +11,11 @@ class ExperimentRecord(Base):
     experiment_id: Mapped[str] = mapped_column(
         String(100),
         primary_key=True,
+    )
+
+    planned_sample_size: Mapped[int | None] = mapped_column(
+    Integer,
+    nullable=True,
     )
 
     name: Mapped[str] = mapped_column(

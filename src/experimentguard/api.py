@@ -14,7 +14,7 @@ from .metrics_repository import MetricsRepository
 from .statistics_repository import StatisticsRepository
 from .models import ExperimentRecord
 from src.experimentguard.health_repository import HealthRepository
-
+from src.experimentguard.decision_repository import DecisionRepository
 
 
 app = FastAPI(
@@ -298,5 +298,31 @@ def get_experiment_health(
     except ValueError as error:
         raise HTTPException(
             status_code=404,
+            detail=str(error),
+        ) from error
+
+
+
+
+@app.get("/experiments/{experiment_id}/decision")
+def get_experiment_decision(
+    experiment_id: str,
+    db: Session = Depends(get_db),
+):
+    repository = DecisionRepository(db)
+
+    try:
+        result = repository.get_decision(experiment_id)
+        return result
+
+    except ValueError as error:
+        if str(error) == "Experiment not found.":
+            raise HTTPException(
+                status_code=404,
+                detail=str(error),
+            ) from error
+
+        raise HTTPException(
+            status_code=400,
             detail=str(error),
         ) from error
