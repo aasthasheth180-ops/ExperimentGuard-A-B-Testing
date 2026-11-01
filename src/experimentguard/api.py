@@ -13,6 +13,7 @@ from .event_repository import EventRepository
 from .metrics_repository import MetricsRepository
 from .statistics_repository import StatisticsRepository
 from .models import ExperimentRecord
+from src.experimentguard.health_repository import HealthRepository
 
 
 
@@ -275,3 +276,27 @@ def get_experiment_statistics(
         "experiment_id": experiment_id,
         "statistics": result,
     }
+
+
+@app.get("/experiments/{experiment_id}/health")
+def get_experiment_health(
+    experiment_id: str,
+    db: Session = Depends(get_db),
+):
+    repository = HealthRepository(db)
+
+    try:
+        result = repository.get_assignment_health(
+            experiment_id
+        )
+
+        return {
+            "experiment_id": experiment_id,
+            **result,
+        }
+
+    except ValueError as error:
+        raise HTTPException(
+            status_code=404,
+            detail=str(error),
+        ) from error
