@@ -229,11 +229,7 @@ type BackendExperiment = {
   status: string;
 };
 export const ExperimentGuardCompleteInteractiveProductPrototype = () => {
-  const [page, P] = useState(() =>
-  sessionStorage.getItem('experimentguard_token')
-    ? 'Overview'
-    : 'Login / Register'
-),
+  const [page, P] = useState('Login / Register'),
 
     [rows, R] = useState<typeof data>([]),
     [selected, S] = useState(0),
@@ -258,6 +254,25 @@ export const ExperimentGuardCompleteInteractiveProductPrototype = () => {
 } | null>(null);
   const [sessionVersion, setSessionVersion] = useState(0);
   const [accountEmail, setAccountEmail] = useState('');
+  const [profileEmail, setProfileEmail] = useState('');
+  const [profilePassword, setProfilePassword] = useState('');
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileMessage, setProfileMessage] = useState('');
+
+  const [passwordFormOpen, setPasswordFormOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState('');
+  const [showProfilePassword, setShowProfilePassword] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  React.useEffect(() => {
+    setProfileEmail(accountEmail);
+  }, [accountEmail]);
+  const [sessionChecking, setSessionChecking] = useState(true);
   const [experimentStatistics, setExperimentStatistics] = useState<{
   experiment_id: string;
   statistics: {
@@ -710,11 +725,19 @@ const createExperiment = async () => {
   };
 
 React.useEffect(() => {
+  let cancelled = false;
+
   const validateSession = async () => {
+    setSessionChecking(true);
+
     const token = sessionStorage.getItem('experimentguard_token');
 
     if (!token) {
-      P('Login / Register');
+      if (!cancelled) {
+        setAccountEmail('');
+        P('Login / Register');
+        setSessionChecking(false);
+      }
       return;
     }
 
@@ -725,21 +748,47 @@ React.useEffect(() => {
         },
       });
 
+      if (cancelled) return;
+
+      if (response.status === 401) {
+        sessionStorage.removeItem('experimentguard_token');
+        setAccountEmail('');
+        R([]);
+        P('Login / Register');
+        return;
+      }
+
       if (!response.ok) {
-          sessionStorage.removeItem('experimentguard_token');
-          setAccountEmail('');
-          P('Login / Register');
-          return;
-}
+        throw new Error('Session validation failed.');
+      }
 
       const user = await response.json();
-      setAccountEmail(user.email ?? '');
+
+      if (cancelled) return;
+
+      setAccountEmail(user.email);
+      P((currentPage) =>
+        currentPage === 'Login / Register' ? 'Overview' : currentPage
+      );
     } catch (error) {
-      console.error('Could not validate session:', error);
+      if (!cancelled) {
+        console.error('Could not validate session:', error);
+        // A network failure does not prove the token is invalid.
+        // Keep it stored, but don't grant dashboard access.
+        P('Login / Register');
+      }
+    } finally {
+      if (!cancelled) {
+        setSessionChecking(false);
+      }
     }
   };
 
-  validateSession();
+  void validateSession();
+
+  return () => {
+    cancelled = true;
+  };
 }, [sessionVersion]);
 
   const cur = rows[selected] || rows[0] || {
@@ -753,6 +802,132 @@ React.useEffect(() => {
   const go = (s: string) => {
     P(s);
     M(false);
+  };
+
+  const handleLogout = () => {
+    sessionStorage.removeItem('experimentguard_token');
+    setAccountEmail('');
+    R([]);
+    M(false);
+    P('Login / Register');
+    setSessionVersion((version) => version + 1);
+};
+
+  const handleProfileUpdate = async () => {
+    const token = sessionStorage.getItem('experimentguard_token');
+
+    if (!token) {
+      setProfileMessage('Please sign in again.');
+      return;
+    }
+
+    if (!profileEmail.trim() || !profilePassword) {
+      setProfileMessage('Enter your email and current password.');
+      return;
+    }
+
+    setProfileSaving(true);
+    setProfileMessage('');
+
+    try {
+      const response = await fetch('http://127.0.0.1:8000/auth/me', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          email: profileEmail,
+          current_password: profilePassword,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          typeof data.detail === 'string'
+            ? data.detail
+            : 'Could not update profile.'
+        );
+      }
+
+      setAccountEmail(data.email);
+      setProfileEmail(data.email);
+      setProfilePassword('');
+      setProfileMessage('Profile updated successfully.');
+    } catch (error) {
+      setProfileMessage(
+        error instanceof Error ? error.message : 'Profile update failed.'
+      );
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const handlePasswordChange = async () => {
+    const token = sessionStorage.getItem('experimentguard_token');
+
+    if (!token) {
+      setPasswordMessage('Please sign in again.');
+      return;
+    }
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setPasswordMessage('Please complete all password fields.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordMessage('New passwords do not match.');
+      return;
+    }
+
+    if (newPassword.length < 12) {
+      setPasswordMessage('New password must contain at least 12 characters.');
+      return;
+    }
+
+    setPasswordSaving(true);
+    setPasswordMessage('');
+
+    try {
+      const response = await fetch(
+        'http://127.0.0.1:8000/auth/me/password',
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            current_password: currentPassword,
+            new_password: newPassword,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          typeof data.detail === 'string'
+            ? data.detail
+            : 'Could not change password.'
+        );
+      }
+
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setPasswordMessage('Password changed successfully.');
+    } catch (error) {
+      setPasswordMessage(
+        error instanceof Error ? error.message : 'Password change failed.'
+      );
+    } finally {
+      setPasswordSaving(false);
+    }
   };
 
   const change = async (newStatus: string) => {
@@ -930,6 +1105,16 @@ React.useEffect(() => {
   const heading = (eyebrow: string, title: string, sub: string) => <div className="mb-8"><div className="text-[#5063dc] text-[10px] font-bold tracking-[.2em]">{eyebrow}</div><h1 className="font-serif text-4xl md:text-5xl my-3">{title}<span className="text-[#5063dc]">.</span></h1><p className="text-[#8b96a6]">{sub}</p></div>;
   const metric = (label: string, value: string) => <div className={box}><div className="text-[10px] text-[#8e99aa] font-bold tracking-widest">{label}</div><div className="font-serif text-4xl mt-4">{value}</div><p className="text-[#a2aab7] text-xs mt-2"></p><p>Live experiment data</p></div>;
   const table = (arr: typeof data) => <div className="overflow-x-auto"><table className="w-full text-sm text-left"><thead><tr className="border-b text-[#9aa4b4] text-[10px] tracking-widest">{['EXPERIMENT', 'STATUS', 'USERS', 'A', 'B'].map(s => <th className="py-4" key={s}>{s}</th>)}</tr></thead><tbody>{arr.map(e => <tr key={e.name} className="border-b border-[#edf0f5] cursor-pointer hover:bg-[#f8f9ff]" onClick={() => open(rows.indexOf(e))}><td className="py-5 font-semibold">{e.name}</td><td><span className="bg-[#eef0ff] text-[#5063dc] rounded-full px-3 py-1 text-xs">{e.status}</span></td><td>{e.users.toLocaleString()}</td><td>{e.users ? e.a + '%' : '—'}</td><td>{e.users ? e.b + '%' : '—'}</td></tr>)}</tbody></table></div>;
+    // Show loading screen while validating authentication
+  if (sessionChecking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-sm text-slate-500">
+          Validating your session...
+        </p>
+      </div>
+    );
+  }
   return <div className="min-h-screen bg-[#fafbfe] text-[#1e2b43] font-sans"><style>{`
   @keyframes egtype {
     0% { width: 0; }
@@ -978,7 +1163,7 @@ React.useEffect(() => {
       stroke-dashoffset: 0;
     }
   }
-`}</style>{page === 'Login / Register' ? <LoginScreen onSuccess={() => {setSessionVersion(v => v + 1); go('Overview')}} /> : <div className="flex min-h-screen"><aside className="w-[72px] bg-white border-r border-[#e9edf3] flex flex-col items-center gap-7 py-6 sticky top-0 h-screen shrink-0"><button className="bg-[#1d2940] text-white font-serif w-10 h-10 rounded-xl" onClick={() => go('Overview')}>EG</button><div className="flex flex-col gap-4">{nav.map(n => <button title={n.name} key={n.name} onClick={() => go(n.name)} className={'w-10 h-10 grid place-items-center rounded-lg ' + (page === n.name ? 'bg-[#edf0ff] text-[#5063dc]' : 'text-[#9ba6b5] hover:bg-[#f5f6fb]')}><n.icon size={20} /></button>)}</div><button className="mt-auto text-[#8c98a9]" onClick={() => M(!menu)}><UserRound size={22} /></button>{menu && <div className="absolute bottom-4 left-16 w-60 bg-white rounded-xl border shadow-xl p-4 z-20"><b>My Account</b><p className="text-xs text-[#8b96a6] my-3">demo@experimentguard.io</p><button className="flex gap-2 py-2" onClick={() => go('Account Settings')}><Settings size={16} /> Settings</button><button className="flex gap-2 py-2" onClick={() => go('Login / Register')}><LogOut size={16} /> Log out</button><button className="flex gap-2 py-2 text-red-600" onClick={() => {
+`}</style>{page === 'Login / Register' ? <LoginScreen onSuccess={() => {setSessionVersion(v => v + 1); go('Overview')}} /> : <div className="flex min-h-screen"><aside className="w-[72px] bg-white border-r border-[#e9edf3] flex flex-col items-center gap-7 py-6 sticky top-0 h-screen shrink-0"><button className="bg-[#1d2940] text-white font-serif w-10 h-10 rounded-xl" onClick={() => go('Overview')}>EG</button><div className="flex flex-col gap-4">{nav.map(n => <button title={n.name} key={n.name} onClick={() => go(n.name)} className={'w-10 h-10 grid place-items-center rounded-lg ' + (page === n.name ? 'bg-[#edf0ff] text-[#5063dc]' : 'text-[#9ba6b5] hover:bg-[#f5f6fb]')}><n.icon size={20} /></button>)}</div><button className="mt-auto text-[#8c98a9]" onClick={() => M(!menu)}><UserRound size={22} /></button>{menu && <div className="absolute bottom-4 left-16 w-60 bg-white rounded-xl border shadow-xl p-4 z-20"><b>My Account</b><p className="text-xs text-[#8b96a6] my-3">{accountEmail || 'Loading account...'}</p><button className="flex gap-2 py-2" onClick={() => go('Account Settings')}><Settings size={16} /> Settings</button><button className="flex gap-2 py-2" onClick={handleLogout}><LogOut size={16} /> Log out</button><button className="flex gap-2 py-2 text-red-600" onClick={() => {
             go('Account Settings');
             B('delete');
           }}><Trash2 size={16} /> Delete account</button></div>}</aside><main className="flex-1 min-w-0"><div className="h-16 bg-white border-b border-[#edf0f5] flex items-center justify-between px-6 md:px-10 text-[10px] tracking-widest text-[#9aa5b4]">WORKSPACE / {page.toUpperCase()} </div><div className="max-w-7xl mx-auto p-6 md:p-10">{page === 'Overview' && <><div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-5 mb-8"><div><div className="text-[#5063dc] text-[10px] font-bold tracking-[.2em]">WORKSPACE / OVERVIEW</div><h1 className="font-serif text-4xl md:text-5xl mt-3">Your experiment lab<span className="text-[#5063dc]">.</span></h1><p className="text-[#8793a5] mt-3">A clearer view of every hypothesis, result, and next decision.</p></div><button className={primary + " self-start sm:self-auto shadow-md shadow-indigo-100"} onClick={() => go('Create Experiment')}><Plus size={16} className="inline mr-2" />New experiment</button></div>
@@ -1714,7 +1899,182 @@ React.useEffect(() => {
                 </>
               )}
 
-              {page === 'Account Settings' && <>{heading('WORKSPACE / ACCOUNT', 'Account settings', 'Manage your profile and security.')}<div className="grid lg:grid-cols-2 gap-5"><div className={box}><h3 className="font-semibold text-lg mb-6">Profile</h3><label>Email address<input className={input} readOnly value={accountEmail} /></label><button className={primary}>Save profile</button></div><div className={box}><h3 className="font-semibold text-lg mb-6">Security</h3><button className="border rounded-lg px-4 py-3">Change password</button><hr className="my-7" /><p className="text-red-600 text-xs font-bold tracking-widest">DANGER ZONE</p><p className="text-[#8b96a6] my-5">Deletion requires confirmation and backend security controls.</p><button className="text-red-600 border border-red-200 bg-red-50 px-4 py-3 rounded-lg" onClick={() => B('delete')}>Delete account</button></div></div></>}</div></main></div>}{modal && <div className="fixed inset-0 bg-[#1b294080] grid place-items-center z-50 p-5"><div className="bg-white rounded-xl p-8 max-w-md w-full"><h3 className="text-xl font-semibold">{modal === 'delete' ? 'Delete account?' : 'Complete experiment?'}</h3><p className="text-[#8b96a6] my-5">{modal === 'delete' ? 'Deletion is disabled in the prototype.' : 'This will mark the experiment as completed and update its status in the database. Confirm before continuing.'}</p><div className="flex gap-3 justify-end"><button className="border rounded-lg px-4 py-3" onClick={() => B('')}>Cancel</button><button className={primary} onClick={async () => {
+              {page === 'Account Settings' && (
+  <>
+    {heading(
+      'WORKSPACE / ACCOUNT',
+      'Account settings',
+      'Manage your profile and security.'
+    )}
+
+    <div className="grid lg:grid-cols-2 gap-5">
+      {/* PROFILE */}
+      <div className={box}>
+        <h3 className="font-semibold text-lg mb-6">Profile</h3>
+
+        <label className="block mb-4">
+          Email address
+          <input
+            className={input}
+            type="email"
+            value={profileEmail}
+            onChange={(e) => setProfileEmail(e.target.value)}
+          />
+        </label>
+
+        <div className="mb-4">
+          <label htmlFor="profile-current-password" className="block mb-2">
+            Current password
+          </label>
+
+         <div className="relative">
+          <input
+            id="profile-current-password"
+            className={`${input} pr-20`}
+            type={showProfilePassword ? 'text' : 'password'}
+            value={profilePassword}
+            onChange={(e) => setProfilePassword(e.target.value)}
+            placeholder="Required to change email"
+          />
+
+        <button
+        type="button"
+        onClick={() => setShowProfilePassword((v) => !v)}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-[#526078]"
+    >
+      {showProfilePassword ? 'Hide' : 'Show'}
+    </button>
+  </div>
+</div>
+
+        <button
+          className={primary}
+          onClick={handleProfileUpdate}
+          disabled={profileSaving}
+        >
+          {profileSaving ? 'Saving...' : 'Save profile'}
+        </button>
+
+        {profileMessage && (
+          <p className="text-sm mt-3" role="status">
+            {profileMessage}
+          </p>
+        )}
+      </div>
+
+      {/* SECURITY */}
+      <div className={box}>
+        <h3 className="font-semibold text-lg mb-6">Security</h3>
+
+        <button
+          className="border rounded-lg px-4 py-3"
+          onClick={() => {
+            setPasswordFormOpen(!passwordFormOpen);
+            setPasswordMessage('');
+          }}
+        >
+          Change password
+        </button>
+
+        {passwordFormOpen && (
+          <div className="mt-5 space-y-4">
+            <div className="space-y-4">
+  <div className="relative">
+    <input
+      className={`${input} pr-20`}
+      type={showCurrentPassword ? 'text' : 'password'}
+      placeholder="Current password"
+      aria-label="Current password"
+      value={currentPassword}
+      onChange={(e) => setCurrentPassword(e.target.value)}
+    />
+    <button
+      type="button"
+      onClick={() => setShowCurrentPassword((v) => !v)}
+      aria-label={showCurrentPassword ? 'Hide current password' : 'Show current password'}
+      className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-[#526078]"
+    >
+      {showCurrentPassword ? 'Hide' : 'Show'}
+    </button>
+  </div>
+
+  <div className="relative">
+    <input
+      className={`${input} pr-20`}
+      type={showNewPassword ? 'text' : 'password'}
+      placeholder="New password (minimum 12 characters)"
+      aria-label="New password"
+      value={newPassword}
+      onChange={(e) => setNewPassword(e.target.value)}
+    />
+    <button
+      type="button"
+      onClick={() => setShowNewPassword((v) => !v)}
+      aria-label={showNewPassword ? 'Hide new password' : 'Show new password'}
+      className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-[#526078]"
+    >
+      {showNewPassword ? 'Hide' : 'Show'}
+    </button>
+  </div>
+
+  <div className="relative">
+    <input
+      className={`${input} pr-20`}
+      type={showConfirmPassword ? 'text' : 'password'}
+      placeholder="Confirm new password"
+      aria-label="Confirm new password"
+      value={confirmPassword}
+      onChange={(e) => setConfirmPassword(e.target.value)}
+    />
+    <button
+      type="button"
+      onClick={() => setShowConfirmPassword((v) => !v)}
+      aria-label={showConfirmPassword ? 'Hide confirmation password' : 'Show confirmation password'}
+      className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-[#526078]"
+    >
+      {showConfirmPassword ? 'Hide' : 'Show'}
+    </button>
+  </div>
+</div>
+
+
+
+            <button
+              className={primary}
+              onClick={handlePasswordChange}
+              disabled={passwordSaving}
+            >
+              {passwordSaving ? 'Updating...' : 'Update password'}
+            </button>
+
+            {passwordMessage && (
+              <p className="text-sm" role="status">
+                {passwordMessage}
+              </p>
+            )}
+          </div>
+        )}
+
+        <hr className="my-7" />
+
+        <p className="text-red-600 text-xs font-bold tracking-widest">
+          DANGER ZONE
+        </p>
+
+        <p className="text-[#8b96a6] my-5">
+          Deletion requires confirmation and backend security controls.
+        </p>
+
+        <button
+          className="text-red-600 border border-red-200 bg-red-50 px-4 py-3 rounded-lg"
+          onClick={() => B('delete')}
+        >
+          Delete account
+        </button>
+      </div>
+    </div>
+  </>
+)}</div></main></div>}{modal && <div className="fixed inset-0 bg-[#1b294080] grid place-items-center z-50 p-5"><div className="bg-white rounded-xl p-8 max-w-md w-full"><h3 className="text-xl font-semibold">{modal === 'delete' ? 'Delete account?' : 'Complete experiment?'}</h3><p className="text-[#8b96a6] my-5">{modal === 'delete' ? 'Deletion is disabled in the prototype.' : 'This will mark the experiment as completed and update its status in the database. Confirm before continuing.'}</p><div className="flex gap-3 justify-end"><button className="border rounded-lg px-4 py-3" onClick={() => B('')}>Cancel</button><button className={primary} onClick={async () => {
             if (modal === 'complete') { await change('Completed');}
             B('');
           }}>Confirm Complete</button></div></div></div>}</div>;

@@ -6,7 +6,7 @@ from sqlalchemy.engine import URL
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 from src.experimentguard.api import app, get_db
-from src.experimentguard.auth import get_current_user
+from src.experimentguard.auth import get_auth_db, get_current_user
 
 
 load_dotenv()
@@ -73,3 +73,25 @@ def api_client(db_session):
     finally:
         app.dependency_overrides.pop(get_db, None)
         app.dependency_overrides.pop(get_current_user, None)
+
+
+
+@pytest.fixture
+def auth_client(db_session, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv(
+        "JWT_SECRET_KEY",
+        "experimentguard_test_secret_key_1234567890",
+    )
+
+    def override_get_auth_db():
+        yield db_session
+
+    app.dependency_overrides[get_auth_db] = override_get_auth_db
+
+    try:
+        with TestClient(app) as client:
+            yield client
+    finally:
+        app.dependency_overrides.pop(get_auth_db, None)
