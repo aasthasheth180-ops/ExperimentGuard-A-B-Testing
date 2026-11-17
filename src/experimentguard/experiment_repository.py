@@ -22,13 +22,14 @@ class ExperimentRepository:
             raise ValueError("Experiment ID already exists.")
 
         record = ExperimentRecord(
-            experiment_id=experiment.experiment_id,
-            name=experiment.name,
-            variants=dict(experiment.variants),
-            primary_metric=experiment.primary_metric,
-            status=experiment.status,
-        )
-
+        experiment_id=experiment.experiment_id,
+        name=experiment.name,
+        hypothesis=experiment.hypothesis,
+        variants=dict(experiment.variants),
+        primary_metric=experiment.primary_metric,
+        status=experiment.status,
+        planned_sample_size=experiment.planned_sample_size,
+)
         self.session.add(record)
         self.session.commit()
 
@@ -143,7 +144,9 @@ class ExperimentRepository:
         return Experiment(
             experiment_id=record.experiment_id,
             name=record.name,
+            hypothesis=record.hypothesis,
             variants=record.variants,
             primary_metric=record.primary_metric,
             status=record.status,
+            planned_sample_size=record.planned_sample_size,
         )

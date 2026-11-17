@@ -6,7 +6,7 @@ from sqlalchemy.engine import URL
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 from src.experimentguard.api import app, get_db
-
+from src.experimentguard.auth import get_current_user
 
 
 load_dotenv()
@@ -47,6 +47,7 @@ def db_session():
         connection.close()
 
 
+
 @pytest.fixture
 def api_client(db_session):
     from fastapi.testclient import TestClient
@@ -54,10 +55,21 @@ def api_client(db_session):
     def override_get_db():
         yield db_session
 
+    def override_get_current_user():
+        return {
+            "id": 1,
+            "email": "test@example.com",
+            "is_active": True,
+        }
+
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = (
+        override_get_current_user
+    )
 
     try:
         with TestClient(app) as client:
             yield client
     finally:
-        app.dependency_overrides.clear()
+        app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(get_current_user, None)

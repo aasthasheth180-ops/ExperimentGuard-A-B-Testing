@@ -236,3 +236,36 @@ def test_evaluate_significance_insufficient_sample():
     )
 
     assert result["normal_approximation_valid"] is False
+
+
+def test_realistic_ab_experiment_10000_users():
+    result = evaluate_significance(
+        conversions_a=400,
+        users_a=5000,
+        conversions_b=475,
+        users_b=5000,
+    )
+
+    assert result["conversion_rate_a"] == pytest.approx(0.08)
+    assert result["conversion_rate_b"] == pytest.approx(0.095)
+
+    assert result["absolute_difference"] == pytest.approx(0.015)
+
+    assert result["z_statistic"] == pytest.approx(
+        2.654243731222853
+    )
+
+    assert result["p_value"] == pytest.approx(
+        0.007948639047200497
+    )
+
+    assert result["confidence_interval"]["lower"] == pytest.approx(
+        0.0039273009613735085
+    )
+
+    assert result["confidence_interval"]["upper"] == pytest.approx(
+        0.02607269903862649
+    )
+
+    assert result["is_significant"] is True
+    assert result["normal_approximation_valid"] is True

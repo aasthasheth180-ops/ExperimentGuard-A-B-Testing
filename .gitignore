@@ -1,10 +1,43 @@
-@"
+
+# Python
 .venv/
+venv/
 __pycache__/
 *.pyc
-.env
 .pytest_cache/
 .ruff_cache/
 .coverage
+htmlcov/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+*.pem
+*.key
+
+# IDE and operating system
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Generated datasets
 data/synthetic/*.csv
-"@ | Set-Content .gitignore
+
+# Local logs and database files
+*.log
+*.db
+*.sqlite
+*.sqlite3
+
+
+# React / Vite frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+frontend/coverage/
+frontend/.vite/

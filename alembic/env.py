@@ -2,7 +2,7 @@ from logging.config import fileConfig
 import os
 from sqlalchemy.engine import make_url
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import create_engine, pool
 
 from src.experimentguard.database import Base, DATABASE_URL
 from src.experimentguard import models  # Register SQLAlchemy models
@@ -18,11 +18,6 @@ database_url = make_url(
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Use the database credentials loaded from .env
-config.set_main_option(
-    "sqlalchemy.url",
-    database_url.render_as_string(hide_password=False).replace("%", "%%"),
-)
 
 # Tell Alembic which tables to track
 target_metadata = Base.metadata
@@ -36,26 +31,30 @@ def run_migrations_offline():
         dialect_opts={"paramstyle": "named"},
     )
 
+
     with context.begin_transaction():
         context.run_migrations()
 
 
+
 def run_migrations_online():
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
+    connectable = create_engine(
+        database_url,
         poolclass=pool.NullPool,
     )
 
-    with connectable.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata,
-            compare_type=True,
-        )
+    try:
+        with connectable.connect() as connection:
+            context.configure(
+                connection=connection,
+                target_metadata=target_metadata,
+                compare_type=True,
+            )
 
-        with context.begin_transaction():
-            context.run_migrations()
+            with context.begin_transaction():
+                context.run_migrations()
+    finally:
+        connectable.dispose()
 
 
 if context.is_offline_mode():

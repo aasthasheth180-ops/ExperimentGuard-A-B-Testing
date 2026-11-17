@@ -1,9 +1,8 @@
 from datetime import datetime, timezone
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import ForeignKey, UniqueConstraint
+from sqlalchemy import ForeignKey, UniqueConstraint,Text,Index,DateTime, String, Integer
 from .database import Base
-from sqlalchemy import DateTime, String, ForeignKey, UniqueConstraint, Integer
 
 class ExperimentRecord(Base):
     __tablename__ = "experiments"
@@ -21,6 +20,11 @@ class ExperimentRecord(Base):
     name: Mapped[str] = mapped_column(
         String(255),
         nullable=False,
+    )
+
+    hypothesis: Mapped[str | None] = mapped_column(
+    Text,
+    nullable=True,
     )
 
     variants: Mapped[dict] = mapped_column(
@@ -120,4 +124,47 @@ class EventRecord(Base):
         JSONB,
         nullable=False,
         default=dict,
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_events_experiment_type_user",
+            "experiment_id",
+            "event_type",
+            "user_id",
+        ),
+    )
+
+
+
+class UserRecord(Base):
+    __tablename__ = "platform_users"
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        autoincrement=True,
+    )
+
+    email: Mapped[str] = mapped_column(
+        String(255),
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+
+    password_hash: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    is_active: Mapped[bool] = mapped_column(
+        default=True,
+        nullable=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
     )
